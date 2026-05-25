@@ -52,6 +52,7 @@ export const UploadZone = ({ onSubmit, busy }) => {
       duration = 0;
     }
     onSubmit?.({
+      file,
       filename: file.name,
       durationSeconds: Number(duration?.toFixed?.(2) || 0),
       sizeBytes: file.size,
