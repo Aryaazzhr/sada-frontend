@@ -95,7 +95,9 @@ export const RecordButton = ({ onSubmit, busy }) => {
       ? "aac"
       : "webm";
     const fname = `recording-${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
+    const audioFile = new File([blob], fname, { type: blob.type || "audio/webm" });
     onSubmit?.({
+      file: audioFile,
       filename: fname,
       durationSeconds: seconds,
       sizeBytes: blob.size,
