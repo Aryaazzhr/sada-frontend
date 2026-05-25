@@ -8,13 +8,14 @@ const client = axios.create({
   timeout: 30000,
 });
 
-export const detectAudio = async ({ filename, durationSeconds, source, sizeBytes, mimeType }) => {
-  const { data } = await client.post("/detect", {
-    filename,
-    duration_seconds: durationSeconds || 0,
-    source: source || "upload",
-    size_bytes: sizeBytes || 0,
-    mime_type: mimeType || null,
+export const detectAudio = async ({ file, filename, durationSeconds, source, sizeBytes, mimeType }) => {
+  const form = new FormData();
+  form.append("file", file, filename || file.name);
+  if (durationSeconds) form.append("duration_seconds", String(durationSeconds));
+  if (source) form.append("source", source);
+  const { data } = await client.post("/detect", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 120000,
   });
   return data;
 };
