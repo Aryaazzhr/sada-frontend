@@ -6,13 +6,13 @@ import { Loader2, Waves, Eye, EyeOff, ArrowLeft, Mail, RefreshCw } from "lucide-
 
 export default function Login() {
   const { lang } = useApp();
-  const { login, register, verify, resend } = useAuth();
+  const { login, register, verify, resend, forgotPassword, resetPassword } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/detector";
 
-  const [tab, setTab] = useState("login"); // login | register
-  const [step, setStep] = useState("form"); // form | verify
+  const [tab, setTab] = useState("login"); // login | register | forgot
+  const [step, setStep] = useState("form"); // form | verify | reset_verify
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -54,7 +54,28 @@ export default function Login() {
     e.preventDefault();
     setError("");
 
-    if (!email || !password) {
+    if (!email) {
+      setError(lang === "id" ? "Email wajib diisi." : "Email is required.");
+      return;
+    }
+
+    if (tab === "forgot") {
+      setBusy(true);
+      try {
+        await forgotPassword({ email });
+        setStep("reset_verify");
+        setCodeDigits(["", "", "", "", "", ""]);
+        setTimeout(() => codeRefs.current[0]?.focus(), 100);
+      } catch (err) {
+        const detail = err.response?.data?.detail;
+        setError(detail || (lang === "id" ? "Email tidak ditemukan." : "Email not found."));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!password) {
       setError(lang === "id" ? "Email dan password wajib diisi." : "Email and password are required.");
       return;
     }
@@ -112,7 +133,11 @@ export default function Login() {
     if (value && index === 5) {
       const fullCode = newDigits.join("");
       if (fullCode.length === 6) {
-        handleVerify(fullCode);
+        if (step === "verify") {
+          handleVerify(fullCode);
+        } else if (step === "reset_verify" && password.length >= 6) {
+          handleResetVerify(fullCode);
+        }
       }
     }
   };
@@ -133,7 +158,11 @@ export default function Login() {
     }
     setCodeDigits(newDigits);
     if (pasted.length === 6) {
-      handleVerify(pasted);
+      if (step === "verify") {
+        handleVerify(pasted);
+      } else if (step === "reset_verify" && password.length >= 6) {
+        handleResetVerify(pasted);
+      }
     } else {
       codeRefs.current[pasted.length]?.focus();
     }
@@ -148,6 +177,29 @@ export default function Login() {
     } catch (err) {
       const detail = err.response?.data?.detail;
       setError(detail || (lang === "id" ? "Kode tidak valid." : "Invalid code."));
+      setCodeDigits(["", "", "", "", "", ""]);
+      codeRefs.current[0]?.focus();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResetVerify = async (code) => {
+    setError("");
+    if (password.length < 6) {
+      setError(lang === "id" ? "Password baru minimal 6 karakter." : "New password must be at least 6 characters.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await resetPassword({ email, code, new_password: password });
+      setTab("login");
+      setStep("form");
+      setPassword("");
+      setError(lang === "id" ? "Password berhasil direset. Silakan masuk." : "Password reset successful. Please sign in.");
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(detail || (lang === "id" ? "Kode tidak valid atau kadaluarsa." : "Invalid or expired code."));
       setCodeDigits(["", "", "", "", "", ""]);
       codeRefs.current[0]?.focus();
     } finally {
@@ -196,6 +248,14 @@ export default function Login() {
         resend: "Kirim ulang kode",
         resend_cooldown: "Kirim ulang dalam",
         back: "Kembali",
+        forgot_title: "Lupa Password",
+        forgot_subtitle: "Masukkan email Anda untuk menerima kode reset.",
+        reset_title: "Reset Password",
+        reset_subtitle: "Masukkan kode 6 digit dari email dan password baru Anda.",
+        forgot_link: "Lupa Password?",
+        submit_forgot: "Kirim Kode Reset",
+        submit_reset: "Simpan Password Baru",
+        new_password: "Password Baru",
       }
     : {
         login_title: "Sign in to SADA",
@@ -220,10 +280,18 @@ export default function Login() {
         resend: "Resend code",
         resend_cooldown: "Resend in",
         back: "Back",
+        forgot_title: "Forgot Password",
+        forgot_subtitle: "Enter your email to receive a reset code.",
+        reset_title: "Reset Password",
+        reset_subtitle: "Enter the 6-digit code and your new password.",
+        forgot_link: "Forgot Password?",
+        submit_forgot: "Send Reset Code",
+        submit_reset: "Save New Password",
+        new_password: "New Password",
       };
 
   // ── Verification code screen ────────────────────────────────────────
-  if (step === "verify") {
+  if (step === "verify" || step === "reset_verify") {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-12rem)] px-4">
         <div className="w-full max-w-md animate-fade-up">
@@ -234,12 +302,12 @@ export default function Login() {
               <span className="absolute inset-0 rounded-2xl bg-rose-500/20 blur-xl opacity-60" />
             </div>
             <h1 className="font-heading text-2xl sm:text-3xl font-light tracking-tight text-center">
-              {i.verify_title}
+              {step === "verify" ? i.verify_title : i.reset_title}
             </h1>
             <p className="text-sm text-zinc-400 mt-2 text-center max-w-xs">
-              {i.verify_subtitle}
+              {step === "verify" ? i.verify_subtitle : i.reset_subtitle}
             </p>
-            <p className="text-sm text-white font-medium mt-1">{email}</p>
+            {step === "verify" && <p className="text-sm text-white font-medium mt-1">{email}</p>}
           </div>
 
           {/* Code Card */}
@@ -268,6 +336,31 @@ export default function Login() {
               ))}
             </div>
 
+            {/* New Password input (only for reset_verify) */}
+            {step === "reset_verify" && (
+              <div className="mb-6">
+                <label className="block text-xs uppercase tracking-wider text-zinc-400 mb-1.5 font-medium text-center">
+                  {i.new_password}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPw ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 pr-11 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-rose-400/50 focus:ring-1 focus:ring-rose-400/30 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                  >
+                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Error */}
             {error && (
               <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300 mb-4 text-center" data-testid="verify-error">
@@ -278,13 +371,13 @@ export default function Login() {
             {/* Verify button */}
             <button
               type="button"
-              onClick={() => handleVerify(codeDigits.join(""))}
-              disabled={busy || codeDigits.join("").length < 6}
+              onClick={() => step === "verify" ? handleVerify(codeDigits.join("")) : handleResetVerify(codeDigits.join(""))}
+              disabled={busy || codeDigits.join("").length < 6 || (step === "reset_verify" && password.length < 6)}
               data-testid="verify-submit"
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-white text-black px-5 py-3 text-sm font-semibold tracking-wide hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-              {i.verify_btn}
+              {step === "verify" ? i.verify_btn : i.submit_reset}
             </button>
 
             {/* Resend + Back */}
@@ -331,42 +424,44 @@ export default function Login() {
             <p className="font-heading text-2xl font-semibold tracking-tight">SADA</p>
           </Link>
           <h1 className="font-heading text-2xl sm:text-3xl font-light tracking-tight text-center">
-            {tab === "login" ? i.login_title : i.register_title}
+            {tab === "login" ? i.login_title : tab === "register" ? i.register_title : i.forgot_title}
           </h1>
           <p className="text-sm text-zinc-400 mt-2 text-center">
-            {tab === "login" ? i.login_subtitle : i.register_subtitle}
+            {tab === "login" ? i.login_subtitle : tab === "register" ? i.register_subtitle : i.forgot_subtitle}
           </p>
         </div>
 
         {/* Card */}
         <div className="glass-strong rounded-3xl p-6 sm:p-8">
           {/* Tab Switcher */}
-          <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 w-full mb-6">
-            <button
-              type="button"
-              onClick={() => switchTab("login")}
-              data-testid="auth-tab-login"
-              className={`flex-1 text-xs uppercase tracking-wider px-4 py-2.5 rounded-full transition-colors font-medium ${
-                tab === "login"
-                  ? "bg-white/10 text-white border border-white/15"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              {i.tab_login}
-            </button>
-            <button
-              type="button"
-              onClick={() => switchTab("register")}
-              data-testid="auth-tab-register"
-              className={`flex-1 text-xs uppercase tracking-wider px-4 py-2.5 rounded-full transition-colors font-medium ${
-                tab === "register"
-                  ? "bg-white/10 text-white border border-white/15"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              {i.tab_register}
-            </button>
-          </div>
+          {tab !== "forgot" && (
+            <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 w-full mb-6">
+              <button
+                type="button"
+                onClick={() => switchTab("login")}
+                data-testid="auth-tab-login"
+                className={`flex-1 text-xs uppercase tracking-wider px-4 py-2.5 rounded-full transition-colors font-medium ${
+                  tab === "login"
+                    ? "bg-white/10 text-white border border-white/15"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                {i.tab_login}
+              </button>
+              <button
+                type="button"
+                onClick={() => switchTab("register")}
+                data-testid="auth-tab-register"
+                className={`flex-1 text-xs uppercase tracking-wider px-4 py-2.5 rounded-full transition-colors font-medium ${
+                  tab === "register"
+                    ? "bg-white/10 text-white border border-white/15"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                {i.tab_register}
+              </button>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -407,32 +502,45 @@ export default function Login() {
             )}
 
             {/* Password */}
-            <div>
-              <label htmlFor="auth-password" className="block text-xs uppercase tracking-wider text-zinc-400 mb-1.5 font-medium">
-                {i.password}
-              </label>
-              <div className="relative">
-                <input
-                  id="auth-password"
-                  data-testid="auth-password"
-                  type={showPw ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={tab === "register" ? "new-password" : "current-password"}
-                  placeholder="••••••••"
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 pr-11 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-rose-400/50 focus:ring-1 focus:ring-rose-400/30 transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
-                  aria-label="Toggle password visibility"
-                  tabIndex={-1}
-                >
-                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+            {tab !== "forgot" && (
+              <div>
+                <label htmlFor="auth-password" className="block text-xs uppercase tracking-wider text-zinc-400 mb-1.5 font-medium">
+                  {i.password}
+                </label>
+                <div className="relative">
+                  <input
+                    id="auth-password"
+                    data-testid="auth-password"
+                    type={showPw ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={tab === "register" ? "new-password" : "current-password"}
+                    placeholder="••••••••"
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 pr-11 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-rose-400/50 focus:ring-1 focus:ring-rose-400/30 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                    aria-label="Toggle password visibility"
+                    tabIndex={-1}
+                  >
+                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {tab === "login" && (
+                  <div className="mt-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => switchTab("forgot")}
+                      className="text-xs text-rose-300 hover:text-white transition-colors"
+                    >
+                      {i.forgot_link}
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
             {/* Confirm Password — register only */}
             {tab === "register" && (
@@ -468,20 +576,31 @@ export default function Login() {
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-white text-black px-5 py-3 text-sm font-semibold tracking-wide hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-              {tab === "login" ? i.submit_login : i.submit_register}
+              {tab === "login" ? i.submit_login : tab === "register" ? i.submit_register : i.submit_forgot}
             </button>
           </form>
 
           {/* Switch link */}
           <p className="mt-5 text-center text-sm text-zinc-400">
-            {tab === "login" ? i.or_register : i.or_login}{" "}
-            <button
-              type="button"
-              onClick={() => switchTab(tab === "login" ? "register" : "login")}
-              className="text-rose-300 hover:text-white transition-colors font-medium"
-            >
-              {tab === "login" ? i.switch_register : i.switch_login}
-            </button>
+            {tab === "login" ? i.or_register : tab === "register" ? i.or_login : ""}
+            {tab === "forgot" ? (
+              <button
+                type="button"
+                onClick={() => switchTab("login")}
+                className="text-zinc-400 hover:text-white transition-colors font-medium flex items-center gap-1 mx-auto"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                {i.back}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => switchTab(tab === "login" ? "register" : "login")}
+                className="text-rose-300 hover:text-white transition-colors font-medium ml-1"
+              >
+                {tab === "login" ? i.switch_register : i.switch_login}
+              </button>
+            )}
           </p>
         </div>
       </div>

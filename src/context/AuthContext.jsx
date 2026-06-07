@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { loginUser, registerUser, getMe, verifyCode as verifyCodeApi, resendCode as resendCodeApi } from "../lib/api";
+import { loginUser, registerUser, getMe, verifyCode as verifyCodeApi, resendCode as resendCodeApi, forgotPasswordApi, resetPasswordApi } from "../lib/api";
 
 const AuthContext = createContext(null);
 
@@ -58,6 +58,16 @@ export const AuthProvider = ({ children }) => {
     return data;
   }, []);
 
+  const forgotPassword = useCallback(async ({ email }) => {
+    const data = await forgotPasswordApi({ email });
+    return data;
+  }, []);
+
+  const resetPassword = useCallback(async ({ email, code, new_password }) => {
+    const data = await resetPasswordApi({ email, code, new_password });
+    return data;
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem("sada_token");
     localStorage.removeItem("sada_user");
@@ -75,9 +85,11 @@ export const AuthProvider = ({ children }) => {
       register,
       verify,
       resend,
+      forgotPassword,
+      resetPassword,
       logout,
     }),
-    [user, token, loading, login, register, verify, resend, logout]
+    [user, token, loading, login, register, verify, resend, forgotPassword, resetPassword, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

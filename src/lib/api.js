@@ -59,6 +59,16 @@ export const resendCode = async ({ email }) => {
   return data;
 };
 
+export const forgotPasswordApi = async ({ email }) => {
+  const { data } = await client.post("/auth/forgot-password", { email });
+  return data;
+};
+
+export const resetPasswordApi = async ({ email, code, new_password }) => {
+  const { data } = await client.post("/auth/reset-password", { email, code, new_password });
+  return data;
+};
+
 // ── Detection API ────────────────────────────────────────────────────────
 export const detectAudio = async ({ file, filename, durationSeconds, source, sizeBytes, mimeType }) => {
   const form = new FormData();
