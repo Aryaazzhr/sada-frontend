@@ -2,6 +2,64 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Loader2 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
+// ── WAV encoder (PCM 16-bit, mono, 16 kHz) ─────────────────────────────
+const TARGET_SR = 16000;
+
+function encodeWav(samples, sampleRate) {
+  // samples: Float32Array, sampleRate: number
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataSize = samples.length * (bitsPerSample / 8);
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  const writeStr = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true); // subchunk1 size
+  view.setUint16(20, 1, true);  // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeStr(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  // Float32 → Int16
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+// Simple downsampler (linear interpolation)
+function downsample(buffer, fromRate, toRate) {
+  if (fromRate === toRate) return buffer;
+  const ratio = fromRate / toRate;
+  const newLength = Math.round(buffer.length / ratio);
+  const result = new Float32Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    const pos = i * ratio;
+    const idx = Math.floor(pos);
+    const frac = pos - idx;
+    result[i] = buffer[idx] + (buffer[idx + 1] !== undefined ? frac * (buffer[idx + 1] - buffer[idx]) : 0);
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+
 export const RecordButton = ({ onSubmit, busy }) => {
   const { t } = useApp();
   const [supported, setSupported] = useState(true);
@@ -11,18 +69,21 @@ export const RecordButton = ({ onSubmit, busy }) => {
   const [blob, setBlob] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
 
-  const mediaRecRef = useRef(null);
-  const chunksRef = useRef([]);
+  const audioCtxRef = useRef(null);
   const streamRef = useRef(null);
+  const chunksRef = useRef([]);
   const timerRef = useRef(null);
+  const processorRef = useRef(null);
+  const sourceRef = useRef(null);
 
   useEffect(() => {
-    if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
+    if (!navigator.mediaDevices) {
       setSupported(false);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") audioCtxRef.current.close();
       if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -30,39 +91,37 @@ export const RecordButton = ({ onSubmit, busy }) => {
 
   const start = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: TARGET_SR,
+          channelCount: 1,
+          echoCancellation: false,
+          noiseSuppression: false,   // let the model see raw audio
+          autoGainControl: false,
+        },
+      });
       streamRef.current = stream;
       setPermission("granted");
 
-      // iOS Safari only supports audio/mp4. Pick a supported mimeType.
-      const candidates = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/mp4;codecs=mp4a.40.2",
-        "audio/mp4",
-        "audio/aac",
-      ];
-      let chosen = "";
-      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported) {
-        chosen = candidates.find((c) => MediaRecorder.isTypeSupported(c)) || "";
-      }
-      const mr = chosen ? new MediaRecorder(stream, { mimeType: chosen }) : new MediaRecorder(stream);
-      mediaRecRef.current = mr;
+      const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: TARGET_SR });
+      audioCtxRef.current = ctx;
+
+      const source = ctx.createMediaStreamSource(stream);
+      sourceRef.current = source;
+
+      // Use ScriptProcessorNode to capture raw PCM float32 chunks
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
       chunksRef.current = [];
-      mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+
+      processor.onaudioprocess = (e) => {
+        const data = e.inputBuffer.getChannelData(0);
+        chunksRef.current.push(new Float32Array(data));
       };
-      mr.onstop = () => {
-        const type = mr.mimeType || chosen || "audio/webm";
-        const b = new Blob(chunksRef.current, { type });
-        setBlob(b);
-        setAudioUrl(URL.createObjectURL(b));
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((t) => t.stop());
-          streamRef.current = null;
-        }
-      };
-      mr.start();
+
+      source.connect(processor);
+      processor.connect(ctx.destination); // required for onaudioprocess to fire
+
       setRecording(true);
       setSeconds(0);
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -74,10 +133,47 @@ export const RecordButton = ({ onSubmit, busy }) => {
   const stop = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
-    if (mediaRecRef.current && mediaRecRef.current.state !== "inactive") {
-      mediaRecRef.current.stop();
+
+    // Disconnect audio nodes
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
     }
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+
+    // Stop mic
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
+    // Combine PCM chunks
+    const chunks = chunksRef.current;
+    const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+    const merged = new Float32Array(totalLen);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    // Downsample to 16 kHz if the AudioContext ran at a different rate
+    const ctxRate = audioCtxRef.current?.sampleRate || TARGET_SR;
+    const finalSamples = downsample(merged, ctxRate, TARGET_SR);
+
+    // Encode as WAV
+    const wavBlob = encodeWav(finalSamples, TARGET_SR);
+    setBlob(wavBlob);
+    setAudioUrl(URL.createObjectURL(wavBlob));
     setRecording(false);
+
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close();
+      audioCtxRef.current = null;
+    }
   };
 
   const reset = () => {
@@ -89,17 +185,14 @@ export const RecordButton = ({ onSubmit, busy }) => {
 
   const analyze = () => {
     if (!blob) return;
-    const ext = (blob.type || "").includes("mp4")
-      ? "m4a"
-      : (blob.type || "").includes("aac")
-      ? "aac"
-      : "webm";
-    const fname = `recording-${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
+    const fname = `recording-${new Date().toISOString().replace(/[:.]/g, "-")}.wav`;
+    const audioFile = new File([blob], fname, { type: "audio/wav" });
     onSubmit?.({
+      file: audioFile,
       filename: fname,
       durationSeconds: seconds,
       sizeBytes: blob.size,
-      mimeType: blob.type,
+      mimeType: "audio/wav",
       source: "record",
     });
   };

@@ -80,29 +80,29 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <FeatureCard
             icon={<Cpu className="h-4 w-4 text-rose-300" />}
-            title={lang === "id" ? "Inferensi Cepat" : "Fast Inference"}
+            title={lang === "id" ? "Pemrosesan Akurat" : "Accurate Processing"}
             desc={
               lang === "id"
-                ? "Pipeline mock yang merespons di bawah 2 detik — siap diganti dengan model produksi."
-                : "Mock pipeline responds under 2 seconds — designed to be swapped with a production model."
+                ? "Pemrosesan audio dan inferensi ML menggunakan model Wav2Vec2 Base yang responsif dan akurat."
+                : "Audio processing and ML inference using a highly responsive and accurate Wav2Vec2 Base model."
             }
           />
           <FeatureCard
             icon={<ShieldCheck className="h-4 w-4 text-emerald-300" />}
-            title={lang === "id" ? "Privasi-Default" : "Privacy-First"}
+            title={lang === "id" ? "Aman & Privat" : "Secure & Private"}
             desc={
               lang === "id"
-                ? "Audio diproses sesi-per-sesi tanpa autentikasi — cocok untuk demo dan eksplorasi."
-                : "Audio is handled per-session without authentication — ideal for demos and exploration."
+                ? "Dilengkapi sistem autentikasi dan enkripsi JWT. Riwayat deteksi audio Anda tersimpan aman dan privat."
+                : "Secured with authentication and JWT encryption. Your audio detection history is kept private and secure."
             }
           />
           <FeatureCard
             icon={<Activity className="h-4 w-4 text-blue-300" />}
-            title={lang === "id" ? "Statistik Real-time" : "Real-time Stats"}
+            title={lang === "id" ? "Statistik Komprehensif" : "Comprehensive Stats"}
             desc={
               lang === "id"
-                ? "Pantau distribusi AI vs Manusia, riwayat, dan tren 7 hari pada satu dasbor."
-                : "Track AI vs Human distribution, history, and 7-day trend on a single dashboard."
+                ? "Pantau distribusi AI vs Manusia, riwayat deteksi, dan tren penggunaan pada satu dasbor interaktif."
+                : "Monitor AI vs Human distribution, detection history, and usage trends on an interactive dashboard."
             }
           />
         </div>

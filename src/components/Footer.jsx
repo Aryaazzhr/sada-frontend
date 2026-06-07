@@ -22,7 +22,7 @@ export const Footer = () => {
             {lang === "id" ? "Sistem aktif" : "System online"}
           </span>
           <a
-            href="https://github.com"
+            href="https://github.com/Aryaazzhr/sada-backend"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 hover:text-white transition-colors"
