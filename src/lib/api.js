@@ -104,6 +104,11 @@ export const clearHistory = async () => {
   return data;
 };
 
+export const getGlobalStats = async () => {
+  const { data } = await client.get("/global-stats");
+  return data;
+};
+
 export const getStats = async () => {
   const { data } = await client.get("/stats");
   return data;
