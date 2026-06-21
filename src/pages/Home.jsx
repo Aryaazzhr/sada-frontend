@@ -1,10 +1,34 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Sparkles, ShieldCheck, Activity, Cpu, Waves } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { getGlobalStats } from "../lib/api";
+
 
 export default function Home() {
   const { t, lang } = useApp();
 
+  const [liveStats, setLiveStats] = useState({
+    total: 0, ai_ratio: 87.4, human_ratio: 11.6, avg_accuracy: 79.8
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const stats = await getGlobalStats();
+        if (stats && stats.avg_accuracy !== undefined) {
+          setLiveStats(stats);
+        }
+      } catch (err) {
+        console.error("Failed to fetch live stats", err);
+      }
+    };
+    
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
+  
   return (
     <div className="px-4 sm:px-6">
       {/* Hero */}
@@ -55,8 +79,8 @@ export default function Home() {
             {/* Tiny stats row */}
             <div className="mt-10 grid grid-cols-3 gap-4 max-w-md">
               {[
-                { v: "98.2%", l: lang === "id" ? "Akurasi simulasi" : "Sim. accuracy" },
-                { v: "<2s", l: lang === "id" ? "Latensi rata-rata" : "Avg latency" },
+                { v: `${liveStats.avg_accuracy}%`, l: lang === "id" ? "Akurasi model" : "Model accuracy" },
+                { v: liveStats.total.toLocaleString(), l: lang === "id" ? "Total analisis" : "Total analysis" },
                 { v: "25MB", l: lang === "id" ? "Berkas maksimum" : "File limit" },
               ].map((s) => (
                 <div key={s.l} className="glass rounded-xl px-4 py-3">
@@ -70,7 +94,7 @@ export default function Home() {
           </div>
 
           <div className="lg:col-span-5 animate-fade-up [animation-delay:200ms]">
-            <HeroVisual />
+            <HeroVisual stats={liveStats} />
           </div>
         </div>
       </section>
@@ -121,7 +145,7 @@ const FeatureCard = ({ icon, title, desc }) => (
   </div>
 );
 
-const HeroVisual = () => (
+const HeroVisual = ({ stats }) => (
   <div className="relative">
     <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-rose-500/10 via-transparent to-blue-500/10 blur-2xl" />
     <div className="relative glass-strong rounded-3xl p-6 overflow-hidden">
@@ -157,13 +181,13 @@ const HeroVisual = () => (
       <div className="mt-6 grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2.5">
           <p className="text-[10px] uppercase tracking-[0.18em] text-rose-200/80">AI</p>
-          <p className="font-heading text-2xl text-white mt-0.5">87.4%</p>
+          <p className="font-heading text-2xl text-white mt-0.5">{stats.ai_ratio}%</p>
         </div>
         <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2.5">
           <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/80">
             Human
           </p>
-          <p className="font-heading text-2xl text-white mt-0.5">11.6%</p>
+          <p className="font-heading text-2xl text-white mt-0.5">{stats.human_ratio}%</p>
         </div>
       </div>
     </div>
