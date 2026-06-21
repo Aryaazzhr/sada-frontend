@@ -164,7 +164,10 @@ const HeroVisual = ({ stats }) => (
       <div className="mt-6 flex items-end justify-between gap-1 h-40 sm:h-48">
         {Array.from({ length: 56 }).map((_, i) => {
           const h = 20 + Math.abs(Math.sin(i * 0.45) * 70) + ((i * 13) % 18);
-          const isAi = i % 3 === 0 && i > 18 && i < 38;
+          // Real-time: map bar 'i' to the recent labels from the database
+          const isAi = stats.recent_labels && stats.recent_labels.length > 0 
+            ? stats.recent_labels[i % stats.recent_labels.length] === "ai" 
+            : (i % 3 === 0 && i > 18 && i < 38);
           return (
             <span
               key={i}
