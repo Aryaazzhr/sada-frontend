@@ -9,7 +9,7 @@ export default function Home() {
   const { t, lang } = useApp();
 
   const [liveStats, setLiveStats] = useState({
-    total: 0, ai_ratio: 87.4, human_ratio: 11.6, avg_accuracy: 79.8
+    total: 0, ai_ratio: "--", human_ratio: "--", avg_accuracy: 81, recent_labels: []
   });
 
   useEffect(() => {
