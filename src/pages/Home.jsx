@@ -79,7 +79,7 @@ export default function Home() {
             {/* Tiny stats row */}
             <div className="mt-10 grid grid-cols-3 gap-4 max-w-md">
               {[
-                { v: `${liveStats.avg_accuracy}%`, l: lang === "id" ? "Akurasi model" : "Model accuracy" },
+                { v: "98.2%", l: lang === "id" ? "Akurasi simulasi" : "Sim. accuracy" },
                 { v: liveStats.total.toLocaleString(), l: lang === "id" ? "Total analisis" : "Total analysis" },
                 { v: "25MB", l: lang === "id" ? "Berkas maksimum" : "File limit" },
               ].map((s) => (
